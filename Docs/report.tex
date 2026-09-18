@@ -1,0 +1,754 @@
+% =====================================================================
+%  Lagrange Duality: Dual Function Construction, Strong Duality,
+%  and Sensitivity Analysis
+%  Amila Snagic --- Numerical Optimization
+%
+%  Compiles with pdflatex (run twice for the table of contents and
+%  cross-references).  Figures are expected in ../figures or ./figures.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper,top=2.3cm,bottom=2.3cm,left=2.4cm,right=2.4cm]{geometry}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{helvet}          % Helvetica-style sans, used on the title page
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{../figures/}{figures/}{./}}
+
+% ---------------------------------------------------------------- theorem styles
+\theoremstyle{definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+
+% ---------------------------------------------------------------- code listings
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codekw}{RGB}{0,0,160}
+\definecolor{codecm}{RGB}{100,100,100}
+\lstset{
+  language=C++,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codekw},
+  commentstyle=\color{codecm}\itshape,
+  backgroundcolor=\color{codebg},
+  frame=none,
+  breaklines=true,
+  showstringspaces=false,
+  xleftmargin=8pt,
+  framexleftmargin=8pt,
+  aboveskip=8pt,
+  belowskip=8pt,
+}
+
+% ---------------------------------------------------------------- shorthands
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\pstar}{p^{\star}}
+\newcommand{\dstar}{d^{\star}}
+\newcommand{\xstar}{x^{\star}}
+\newcommand{\lamstar}{\lambda^{\star}}
+\newcommand{\conv}{\operatorname{\mathbf{conv}}}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+% ================================================================= title page
+\begin{titlepage}
+\centering
+\vspace*{4.2cm}
+
+{\sffamily\bfseries\fontsize{24}{30}\selectfont
+Lagrange Duality: Dual Function\\[2pt]
+Construction, Strong Duality, and\\[2pt]
+Sensitivity Analysis\par}
+
+\vspace{2.0cm}
+{\sffamily\fontsize{14}{17}\selectfont Numerical Optimization\par}
+
+\vspace{1.0cm}
+{\sffamily\fontsize{12.5}{15}\selectfont
+Interactive implementation on the natID framework\par}
+
+\vspace{1.7cm}
+{\sffamily\fontsize{14}{17}\selectfont Amila Snagic\par}
+
+\vspace{1.7cm}
+{\sffamily\fontsize{12}{14}\selectfont
+University of Sarajevo --- Faculty of Electrical Engineering\par}
+
+\vspace{0.6cm}
+{\sffamily\itshape\fontsize{11.5}{14}\selectfont Academic year 2025/26\par}
+
+\vfill
+\end{titlepage}
+
+\setcounter{page}{1}
+
+% ================================================================= abstract
+\begin{center}
+\fcolorbox{gray!40}{gray!5}{%
+\begin{minipage}{0.95\textwidth}
+\small
+\textbf{Abstract.} The Lagrange dual function is constructed by pointwise minimisation of the
+Lagrangian, and weak duality, strong duality, Slater's condition and the shadow-price reading of
+the multipliers are derived. Three instances are implemented: a strictly convex quadratic program
+whose dual is available in closed form, a resource-allocation problem reproducing the
+water-filling rule, and a non-convex problem where strong duality fails. In the convex cases the
+primal is solved twice by unrelated methods, so the reported duality gap is a cross-validation
+rather than one number printed twice. For the non-convex instance the perturbation function and
+its convex envelope exhibit the gap directly. All results agree with theory to between
+$10^{-11}$ and $10^{-16}$.
+\end{minipage}}
+\end{center}
+
+\vspace{0.6cm}
+\tableofcontents
+\newpage
+
+% ================================================================= 1
+\section{Introduction}
+
+Duality attaches to every constrained minimisation problem a second, always-convex problem built
+from its constraints. The dual's value bounds the primal's from below, under mild conditions
+equals it, and its solution prices the constraints. This report derives that theory, applies it
+to three instances, and describes the interactive application built to compute and draw it.
+Every figure was produced by that application.
+
+% ================================================================= 2
+\section{Mathematical foundations}\label{sec:theory}
+
+\subsection{The Lagrangian and the dual function}
+
+For the problem in standard form
+\begin{equation}\label{eq:primal}
+\min_{x\in\R^{n}} f_{0}(x)\quad\text{subject to}\quad f_{i}(x)\le 0,\quad i=1,\dots,m,
+\end{equation}
+with optimal value $\pstar$, the \textbf{Lagrangian} attaches a price $\lambda_{i}$ to each
+constraint,
+\begin{equation}
+L(x,\lambda)=f_{0}(x)+\sum_{i=1}^{m}\lambda_{i}f_{i}(x),
+\end{equation}
+and the \textbf{dual function} is its unconstrained infimum over $x$,
+\begin{equation}\label{eq:dual}
+g(\lambda)=\inf_{x\in\R^{n}}L(x,\lambda),
+\end{equation}
+which may equal $-\infty$. The \textbf{dual problem} is $\max_{\lambda\ge 0}g(\lambda)$, with
+optimal value $\dstar$. No convexity is assumed anywhere above.
+
+\begin{proposition}\label{prop:concave}
+For every problem of the form \eqref{eq:primal} --- convex or not --- $g$ is concave.
+\end{proposition}
+
+\begin{proof}
+For fixed $x$, the map $\lambda\mapsto L(x,\lambda)$ is \emph{affine}, since $f_{0}(x)$ and
+$f_{i}(x)$ are then constants. By \eqref{eq:dual}, $g$ is a pointwise infimum of affine
+functions, and such an infimum is concave.
+\end{proof}
+
+This is the structural reason duality is useful: whatever pathology the primal has,
+\textbf{the dual is a concave maximisation over a convex set}. Section~\ref{sec:gap} exhibits a
+non-convex primal with a perfectly well-behaved concave dual.
+
+\subsection{Weak duality}
+
+\begin{theorem}[Weak duality]\label{thm:weak}
+For every $\lambda\ge 0$, $g(\lambda)\le\pstar$; hence $\dstar\le\pstar$.
+\end{theorem}
+
+\begin{proof}
+Let $\tilde{x}$ be feasible and $\lambda\ge 0$. Each $\lambda_{i}f_{i}(\tilde{x})$ is
+non-positive, so
+\[
+g(\lambda)=\inf_{x}L(x,\lambda)\le L(\tilde{x},\lambda)
+=f_{0}(\tilde{x})+\sum_{i}\lambda_{i}f_{i}(\tilde{x})\le f_{0}(\tilde{x}).
+\]
+Taking the infimum over feasible $\tilde{x}$ and the supremum over $\lambda\ge 0$ gives the
+claim.
+\end{proof}
+
+Only the sign conditions $\lambda\ge 0$ and $f_{i}(\tilde{x})\le 0$ were used ---
+\textbf{no convexity}. Weak duality is therefore universal, which is what makes dual bounds
+valuable in non-convex optimisation. The quantity $\pstar-\dstar\ge 0$ is the
+\textbf{duality gap}.
+
+\subsection{Strong duality, Slater's condition, and the KKT system}
+
+Equality is not automatic. \textbf{Slater's condition} is the standard sufficient criterion: if
+the problem is convex and there exists a \textbf{strictly feasible} point
+($f_{i}(\tilde{x})<0$ for all $i$), then $\dstar=\pstar$ and the dual optimum is attained. It is
+sufficient, not necessary.
+
+When strong duality holds and both optima are attained at $\xstar,\lamstar$, the chain
+\begin{equation}
+f_{0}(\xstar)=g(\lamstar)\le f_{0}(\xstar)+\sum_{i}\lambda_{i}^{\star}f_{i}(\xstar)\le f_{0}(\xstar)
+\end{equation}
+begins and ends at the same value, so both inequalities are equalities. The second forces every
+term of $\sum_{i}\lambda_{i}^{\star}f_{i}(\xstar)$ --- each $\le 0$ --- to vanish:
+\begin{equation}\label{eq:cs}
+\lambda_{i}^{\star}f_{i}(\xstar)=0,\qquad i=1,\dots,m.
+\end{equation}
+This is \textbf{complementary slackness}: a constraint is either active and may carry any
+non-negative price, or slack and priced at zero. The first equality says $\xstar$ minimises
+$L(\cdot,\lamstar)$ over all of $\R^{n}$, so in the differentiable case
+\begin{equation}\label{eq:stat}
+\nabla f_{0}(\xstar)+\sum_{i}\lambda_{i}^{\star}\nabla f_{i}(\xstar)=0
+\end{equation}
+(\textbf{stationarity}). With primal and dual feasibility these are the \textbf{KKT conditions},
+necessary and sufficient for a convex problem satisfying Slater. All four residuals are measured
+in Section~\ref{sec:verify}.
+
+\subsection{Sensitivity: shadow prices and the convex envelope}\label{sec:pert}
+
+Perturbing the constraint levels defines the \textbf{perturbation function}
+\begin{equation}\label{eq:pu}
+p(u)=\inf\{f_{0}(x):f_{i}(x)\le u_{i}\},\qquad p(0)=\pstar.
+\end{equation}
+
+\begin{theorem}[Global sensitivity]\label{thm:sens}
+If strong duality holds with dual optimum $\lamstar$, then
+$p(u)\ge\pstar-(\lamstar)^{T}u$ for every $u$.
+\end{theorem}
+
+\begin{proof}
+If $f_{i}(x)\le u_{i}$ then, using $\lamstar\ge 0$,
+$\pstar=g(\lamstar)\le f_{0}(x)+\sum_{i}\lambda_{i}^{\star}f_{i}(x)\le f_{0}(x)+(\lamstar)^{T}u$.
+Rearranging and taking the infimum gives the claim.
+\end{proof}
+
+So $u\mapsto\pstar-(\lamstar)^{T}u$ is a supporting hyperplane touching $p$ at the origin, and
+$-\lamstar$ is a subgradient of $p$ there. Where $p$ is differentiable,
+\begin{equation}\label{eq:shadow}
+\frac{\partial\pstar}{\partial u_{i}}=-\lambda_{i}^{\star}:
+\end{equation}
+$\lambda_{i}^{\star}$ is the \textbf{shadow price} of constraint $i$, the rate at which the
+optimal cost falls per unit of relaxation. An inactive constraint has $\lambda_{i}^{\star}=0$ by
+\eqref{eq:cs} and so prices at zero, as intuition demands.
+
+The same perturbation view explains gaps. One shows
+$g(\lambda)=\inf_{u}\bigl(p(u)+\lambda^{T}u\bigr)$, whence $\dstar$ is the value at $u=0$ of the
+largest convex function lying below $p$ --- its \textbf{convex envelope}:
+\begin{equation}\label{eq:gapgeom}
+\pstar=p(0),\qquad \dstar=(\conv p)(0),\qquad \text{gap}=p(0)-(\conv p)(0).
+\end{equation}
+If $p$ is convex near the origin the two coincide. If $p$ has a non-convex dent there, the
+envelope cuts a chord across it and \textbf{the gap is the depth of the dent} --- computed
+directly in Section~\ref{sec:gap}.
+
+% ================================================================= 3
+\section{Instance A: convex quadratic program}\label{sec:qp}
+
+\subsection{Model and closed-form dual}
+
+\begin{equation}\label{eq:qp}
+\min_{x\in\R^{n}}\ \tfrac{1}{2}x^{T}Px+q^{T}x\quad\text{subject to}\quad Ax\le b,
+\qquad P\succ 0,
+\end{equation}
+with default data
+\begin{equation}\label{eq:qpdata}
+P=\begin{pmatrix}2&1\\1&2\end{pmatrix},\quad
+q=\begin{pmatrix}-3\\-4\end{pmatrix},\quad
+A=\begin{pmatrix}1&1\\-1&2\end{pmatrix},\quad
+b=\begin{pmatrix}2\\4\end{pmatrix},
+\end{equation}
+chosen so one constraint binds at the optimum and the other does not, giving complementary
+slackness something visible to say.
+
+$L$ is strictly convex in $x$ for every $\lambda$ (its Hessian is $P\succ 0$), so the infimum in
+\eqref{eq:dual} is attained at the stationary point:
+\begin{align}
+Px+q+A^{T}\lambda=0 &\quad\Longrightarrow\quad x(\lambda)=-P^{-1}(q+A^{T}\lambda),
+\label{eq:xlam}\\[4pt]
+g(\lambda)&=-\tfrac{1}{2}(q+A^{T}\lambda)^{T}P^{-1}(q+A^{T}\lambda)-b^{T}\lambda.
+\label{eq:gqp}
+\end{align}
+Discarding a constant, maximising $g$ over $\lambda\ge 0$ is the \textbf{non-negatively
+constrained QP}
+\begin{equation}\label{eq:dualqp}
+\min_{\lambda\ge 0}\ \tfrac{1}{2}\lambda^{T}H\lambda+d^{T}\lambda,\qquad
+H=AP^{-1}A^{T}\succeq 0,\qquad d=b+AP^{-1}q.
+\end{equation}
+The dual of a QP is a QP, but over the far simpler set $\lambda\ge 0$ --- the practical payoff of
+duality here.
+
+\subsection{Solving the dual: exact cyclic coordinate ascent}
+
+Fixing all coordinates but the $i$-th, \eqref{eq:dualqp} restricts to the scalar parabola
+$\tfrac{1}{2}H_{ii}\lambda_{i}^{2}+\lambda_{i}\bigl(d_{i}+\sum_{k\ne i}H_{ik}\lambda_{k}\bigr)$.
+Its minimiser over the half-line $\lambda_{i}\ge 0$ is the vertex, projected:
+\begin{equation}\label{eq:cd}
+\lambda_{i}\ \leftarrow\ \max\!\left(0,\
+-\frac{d_{i}+\sum_{k\ne i}H_{ik}\lambda_{k}}{H_{ii}}\right).
+\end{equation}
+Each update is exact and in closed form --- no step size, no line search. Sweeps run until the
+largest coordinate change falls below $10^{-12}$. Because the feasible set is a product of
+half-lines, coordinate-wise minimisation cannot stall at a non-stationary point, the difficulty
+that makes coordinate descent unreliable for non-separable constraints. Coordinates with
+$H_{ii}\approx 0$ are skipped, handling degenerate constraint rows. The primal is then recovered
+from \eqref{eq:xlam}, which \emph{is} the stationarity condition, so \eqref{eq:stat} holds to
+machine precision automatically.
+
+\subsection{Solving the primal independently: logarithmic barrier method}
+
+Recovering $\xstar$ from $\lamstar$ would make $\pstar$ and $\dstar$ two readings of one
+computation, so the gap would prove nothing. The primal is therefore solved a second time by an
+unrelated route. For $t>0$ define
+\begin{equation}\label{eq:barrier}
+\psi_{t}(x)=t\left(\tfrac{1}{2}x^{T}Px+q^{T}x\right)-\sum_{i=1}^{m}\log(b_{i}-a_{i}^{T}x),
+\end{equation}
+whose barrier term is finite exactly on $Ax<b$ and diverges at the boundary. Its gradient and
+Hessian are $\sum_{i}a_{i}/(b_{i}-a_{i}^{T}x)$ and
+$\sum_{i}a_{i}a_{i}^{T}/(b_{i}-a_{i}^{T}x)^{2}\succeq 0$, so $\psi_{t}$ is strictly convex with a
+unique minimiser $x^{\star}(t)$; the curve $t\mapsto x^{\star}(t)$ is the \textbf{central path},
+and $f_{0}(x^{\star}(t))-\pstar\le m/t$.
+
+The implementation uses the classical two loops. The outer loop starts at $t=1$ and multiplies by
+$\mu=12$ until $m/t<10^{-10}$. The inner loop applies Newton's method, solving
+$\nabla^{2}\psi_{t}\,\Delta x=-\nabla\psi_{t}$ by LU with partial pivoting and stopping on the
+\textbf{Newton decrement} $\lambda_{N}^{2}=-\nabla\psi_{t}^{T}\Delta x$ when
+$\lambda_{N}^{2}/2\le 10^{-12}$; the decrement is used because it is affine-invariant and
+estimates $\psi_{t}(x)-\inf\psi_{t}$ directly. Backtracking ($\alpha=0.25$, $\beta=0.5$) accepts
+a step only when it is \emph{strictly feasible} and satisfies the Armijo condition, which is what
+keeps iterates in the domain of the logarithms.
+
+A strictly feasible start is produced by minimising the smooth squared-hinge measure
+$\Psi(x)=\sum_{i}\max(0,\,a_{i}^{T}x-b_{i}+\delta)^{2}$ with $\delta=10^{-3}$, by gradient
+descent with an adaptive step. Squaring removes the kink of $\max(0,\cdot)$, and $\Psi(x)=0$
+certifies strict feasibility with margin $\delta$ --- so the same routine both initialises the
+barrier method and answers Slater's condition constructively.
+
+\subsection{Results, complementary slackness, and sensitivity}
+
+The two solvers return
+\[
+\xstar=(0.5,\ 1.5)^{T},\qquad \lamstar=(0.5,\ 0)^{T},\qquad
+\pstar=\dstar=-4.25,\qquad \text{gap}=0.
+\]
+The barrier method, which never touches the dual, returns $-4.249999999984$ --- agreement to
+$1.6\times 10^{-11}$, which is what makes the zero gap meaningful. Complementary slackness is
+exact: constraint~1 binds ($\lambda_{1}^{\star}=0.5$, slack $0$), constraint~2 is slack
+($\lambda_{2}^{\star}=0$, slack $1.5$), and both products vanish, exactly as \eqref{eq:cs}
+requires.
+
+Figure~\ref{fig:primal} shows the geometry: objective contours, the feasible polyhedron, the
+unconstrained minimiser $-P^{-1}q=(2/3,\,5/3)$ lying outside it, and $\xstar$ where the innermost
+reachable contour touches the active constraint --- the geometric content of \eqref{eq:stat}.
+Figure~\ref{fig:dual} plots $g$ over the non-negative quadrant: a single concave hill whose
+summit lies \emph{on the boundary} $\lambda_{2}=0$, the dual-side image of constraint~2 being
+inactive.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\textwidth]{1_primal_qp.pdf}
+\caption{Instance A, primal geometry. Filled bands are level sets of $f_{0}$, the hatched wedge
+is $\{x:Ax\le b\}$, the active constraint is solid red and the inactive one dashed.}
+\label{fig:primal}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{2_dual_function.pdf}
+\caption{Instance A, the dual function $g(\lambda_{1},\lambda_{2})$ on $\lambda\ge 0$. Warm
+colours are high. Every point is a lower bound on $\pstar$ (Theorem~\ref{thm:weak}); the summit
+attains it.}
+\label{fig:dual}
+\end{figure}
+
+Figure~\ref{fig:sens} perturbs the first constraint to $a_{1}^{T}x\le b_{1}+u$, re-solving at
+each $u$, and compares with the tangent of Theorem~\ref{thm:sens}. The numerical derivatives
+match the multipliers: $\partial\pstar/\partial u_{1}=-0.5=-\lambda_{1}^{\star}$ to
+$5.6\times 10^{-12}$, and $\partial\pstar/\partial u_{2}=0=-\lambda_{2}^{\star}$. The curve is
+equally instructive where it \emph{stops} matching: for $u>0$ it flattens, because relaxing an
+already-relaxed constraint eventually makes it inactive. That is the active set changing, and it
+is exactly where $p$ loses differentiability and the tangent only bounds, as
+Theorem~\ref{thm:sens} says it must.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{3_sensitivity.pdf}
+\caption{Instance A, sensitivity. Solid: $p^{\star}(u)$ recomputed exactly. Dashed: the
+prediction $\pstar-\lambda_{1}^{\star}u$. Tangency at the origin is \eqref{eq:shadow}.}
+\label{fig:sens}
+\end{figure}
+
+% ================================================================= 4
+\section{Instance B: resource allocation and water filling}\label{sec:alloc}
+
+\subsection{Model, separable dual, and the water-filling rule}
+
+\begin{equation}\label{eq:alloc}
+\max_{x\ge 0}\ \sum_{i=1}^{n}w_{i}\log\!\left(1+\frac{x_{i}}{\alpha_{i}}\right)
+\quad\text{subject to}\quad \sum_{i=1}^{n}x_{i}\le B,
+\end{equation}
+with $w_{i},\alpha_{i}>0$. As a minimisation,
+$f_{0}(x)=-\sum_{i}w_{i}\log(1+x_{i}/\alpha_{i})$, which is convex, subject to
+$\sum_{i}x_{i}-B\le 0$.
+
+\textbf{Only the budget is dualised}; the constraints $x\ge 0$ are kept in the domain of the
+inner minimisation. This leaves one dual variable, so the dual function is a curve that can
+simply be drawn --- and it is what makes the closed form below come out. The Lagrangian then
+separates over $i$, and each scalar piece is convex with derivative
+$-w_{i}/(\alpha_{i}+x_{i})+\lambda$, giving
+\begin{equation}\label{eq:waterfill}
+x_{i}(\lambda)=\max\!\left(0,\ \frac{w_{i}}{\lambda}-\alpha_{i}\right).
+\end{equation}
+This is the classical \textbf{water-filling} rule: $w_{i}/\lambda$ is a \emph{water level},
+$\alpha_{i}$ the \emph{floor} of basin $i$, and $x_{i}$ the depth of water above that floor.
+Basins whose floor already lies above their level receive nothing. For $\lambda\le 0$ the
+Lagrangian is unbounded below, so the dual domain is $\lambda>0$.
+
+Each $x_{i}(\lambda)$ is non-increasing in $\lambda$, so the total
+$T(\lambda)=\sum_{i}x_{i}(\lambda)$ is continuous and strictly decreasing where positive, with
+$T\to\infty$ as $\lambda\to 0^{+}$ and $T\to 0$ as $\lambda\to\infty$. Hence $T(\lambda)=B$ has a
+\emph{unique} root, located by bisection: the bracket is found by doubling, then 300 halvings.
+Bisection is the right tool despite its linear rate --- $T$ has kinks wherever a basin enters or
+leaves the water, which would need care with Newton's method, whereas bisection needs only
+monotonicity and continuity.
+
+At the root the budget binds, and the KKT conditions read
+\begin{equation}\label{eq:market}
+\frac{w_{i}}{\alpha_{i}+x_{i}^{\star}}=\lamstar \ \text{ if } x_{i}^{\star}>0,
+\qquad\qquad
+\frac{w_{i}}{\alpha_{i}}\le\lamstar \ \text{ if } x_{i}^{\star}=0,
+\end{equation}
+the market-clearing reading: at the optimum all funded activities are \textbf{equally} worth
+funding, and anything unfunded is not worth the price of the budget even at zero allocation.
+
+\subsection{Results}
+
+With $w=(3,2,1,0.5)$, $\alpha=(1,0.5,2,0.2)$, $B=6$:
+
+\begin{center}
+\begin{tabular}{ccccl}
+\toprule
+$i$ & $w_{i}$ & $\alpha_{i}$ & $x_{i}^{\star}$ &
+\ \ marginal utility $w_{i}/(\alpha_{i}+x_{i}^{\star})$\\
+\midrule
+1 & 3.0 & 1.0 & 3.2 & \ \ 0.714285714\\
+2 & 2.0 & 0.5 & 2.3 & \ \ 0.714285714\\
+3 & 1.0 & 2.0 & 0.0 & \ \ 0.500000000 --- shut out\\
+4 & 0.5 & 0.2 & 0.5 & \ \ 0.714285714\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+with $\lamstar=0.714285714$, utility $8.3771683$ and $\pstar=\dstar$ to twelve digits. The table
+is \eqref{eq:market} made concrete: the three funded activities share the common marginal utility
+$\lamstar$, while activity 3 --- whose floor is high relative to its weight --- sits at $0.5$,
+below the price, and is correctly shut out. The shadow price is confirmed numerically,
+$\partial\pstar/\partial B=-\lamstar$ to $2.4\times 10^{-11}$: one extra unit of budget buys
+$\lamstar$ extra utility.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.60\textwidth]{4b_water_filling.pdf}
+\caption{Instance B. Grey bars are floors $\alpha_{i}$, blue the allocation $x_{i}$, red segments
+the levels $w_{i}/\lamstar$. Basin 3's floor is above its level, so it stays dry.}
+\label{fig:water}
+\end{figure}
+
+% ================================================================= 5
+\section{Instance C: a non-convex problem with a duality gap}\label{sec:gap}
+
+\subsection{Model and method}
+
+\begin{equation}\label{eq:nc}
+\min_{x\in\R} f_{0}(x)=x^{4}+c_{2}x^{2}+c_{1}x\quad\text{subject to}\quad x\ge x_{\min},
+\end{equation}
+with $c_{2}=-6$, $c_{1}=1$, $x_{\min}=0$. For $c_{2}<0$ this is a \textbf{double well}; with
+these defaults the global minimum lies at $x\approx-1.7589$ with value $\approx-10.7524$, and
+\textbf{the constraint excludes it}. Writing the constraint as $f_{1}(x)=x_{\min}-x\le 0$,
+\begin{equation}\label{eq:gnc}
+g(\lambda)=\lambda x_{\min}+\inf_{x}\bigl[x^{4}+c_{2}x^{2}+(c_{1}-\lambda)x\bigr],
+\end{equation}
+so \textbf{dualising merely shifts the linear coefficient}, $c_{1}\mapsto c_{1}-\lambda$, and one
+routine evaluates both $f_{0}$ and $g$. Since $f_{0}$ is coercive the infimum is finite for every
+$\lambda$, so $g$ is real-valued --- and concave by Proposition~\ref{prop:concave},
+\textbf{even though $f_{0}$ is not convex}.
+
+Both $f_{0}$ and $g$ need \emph{global} minimisation, so the implementation uses a 4001-point
+grid scan followed by 120 golden-section iterations within the two cells adjacent to the best
+grid point. For a coercive quartic with at most three critical points a grid this fine cannot
+miss the global basin, and the refined bracket is unimodal by construction. The outer
+maximisation over $\lambda$ uses the same scheme, legitimately, because $g$ is concave. The
+convex envelope of the sampled $p(u)$ is computed as a \textbf{lower convex hull} by a
+monotone-chain sweep in $O(N)$, popping a point whenever it lies on or above the chord joining
+its neighbours.
+
+\subsection{Results: the gap, three ways}
+
+\[
+\xstar=1.6887758,\quad \pstar=-7.2893095,\quad \lamstar=1.0,\quad \dstar=-9.0,\quad
+\text{gap}=1.7106905.
+\]
+$\dstar=-9$ is exact and verifiable by hand: at $\lambda=1$ the shifted linear coefficient
+vanishes, so \eqref{eq:gnc} reduces to $\inf_{x}(x^{4}-6x^{2})=-9$ at $x=\pm\sqrt{3}$. That the
+maximum falls there is the subgradient condition --- $g'(\lambda)=x_{\min}-x(\lambda)$, and at
+$\lambda=1$ the inner problem has \emph{two} minimisers, so the subdifferential is
+$[-\sqrt{3},\sqrt{3}]\ni 0$. The kink at the summit of Figure~\ref{fig:ncdual} is exactly this
+non-uniqueness.
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+\textbf{Route} & \textbf{Value at $u=0$}\\
+\midrule
+Primal optimum $\pstar=p(0)$ & $-7.2893094547$\\
+Dual optimum $\dstar=\max_{\lambda\ge 0}g(\lambda)$ & $-9.0000000000$\\
+Convex envelope $(\conv p)(0)$, from the hull & $-8.9992382400$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The envelope value matches $\dstar$ to $7.6\times 10^{-4}$, the grid resolution --- a direct
+numerical confirmation of \eqref{eq:gapgeom}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.47\textwidth]{5a_nonconvex_objective.pdf}
+\caption{The objective: the global minimum at $x\approx-1.76$ is infeasible, and the constrained
+optimum sits in the right-hand well.}
+\label{fig:ncobj}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.74\textwidth]{5b_perturbation_and_envelope.pdf}
+\caption{$p(u)$ and its convex envelope. $p$ is flat at $-7.289$, then drops to $-10.75$ near
+$u\approx 1.7$ when the relaxation finally admits the deeper well. That shape is not convex; the
+envelope cuts the chord across it, and the red segment at $u=0$ is the gap.}
+\label{fig:pert}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.47\textwidth]{5c_nonconvex_dual.pdf}
+\caption{The dual function: concave despite the non-convex primal, and staying strictly below
+$\pstar$.}
+\label{fig:ncdual}
+\end{figure}
+
+The instance separates the two theorems cleanly. \textbf{Weak duality survives} ---
+$\dstar\le\pstar$ still holds and $g$ still certifies a lower bound, its proof having used only
+sign conditions. \textbf{Strong duality fails} --- strictly feasible points exist in abundance
+here (every $x>0$), so it is precisely the convexity hypothesis of Slater's condition that has
+been removed, and the conclusion fails with it. The practical lesson is the standard one: in
+non-convex optimisation the dual is still worth solving as a source of certified bounds, and
+\eqref{eq:gapgeom} says in advance how weak those bounds can be.
+
+% ================================================================= 6
+\section{Implementation}\label{sec:impl}
+
+\subsection{Architecture}
+
+The application is about 4100 lines of C++20 on the natID framework, split so that the
+mathematics is independent of the interface.
+
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{File} & \textbf{Lines} & \textbf{Responsibility}\\
+\midrule
+\texttt{core/LinAlg.h}             & 219  & dense LU, Cholesky, vector primitives\\
+\texttt{core/QPProblem.h}          & 402  & dual coordinate ascent, barrier primal, phase I\\
+\texttt{core/AllocationProblem.h}  & 147  & water filling, bisection\\
+\texttt{core/NonconvexProblem.h}   & 217  & grid $+$ golden section, convex envelope\\
+\texttt{core/AppModel.h}           & 141  & the three instances, half-plane clipping\\
+\texttt{views/PlotCanvas.h}        & 821  & plotting engine\\
+\texttt{views/View*.h}             & 1550 & six tabs\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The \texttt{core/} directory has \textbf{no GUI dependency whatsoever}. This was deliberate and
+had a practical payoff: the numerics were developed and verified by a standalone console program
+compiled against \texttt{core/} alone, before any drawing code existed, and every number in
+Section~\ref{sec:verify} comes from that harness. A single \texttt{AppModel} owns the three
+instances; every parameter panel calls one shared callback that re-solves and repaints all six
+tabs, so the application cannot display mutually inconsistent state.
+
+\subsection{Numerical core}
+
+\textbf{Cholesky} $P=LL^{T}$ is used wherever $P^{-1}$ appears. Beyond the usual factor-of-two
+saving it is \textbf{backward stable without pivoting} for symmetric positive definite matrices,
+and its failure is \textbf{diagnostic}: a non-positive radicand means $P$ is not positive
+definite, so the same routine doubles as the positive-definiteness test reported in the
+interface. \textbf{LU with partial pivoting} solves the Newton systems, where near the boundary
+the barrier Hessian has entries of order $10^{10}$ and pivoting guards against the loss of
+positive definiteness that rounding can induce. Forming $H=AP^{-1}A^{T}$ never inverts $P$: each
+row $a_{i}$ is passed through the triangular solves, giving $m$ solves instead of an inversion,
+both cheaper and better conditioned.
+
+\begin{lstlisting}
+static QPSolution solve(const QPData& qp)
+{
+    sol.spd = la::isSPD(qp.P);              // Cholesky, doubles as the PD test
+    if (!sol.spd) return sol;               // dual is -infinity everywhere
+    la::cholesky(qp.P, L);
+
+    sol.lambda = solveDual(qp, L, sol.dualIters);   // coordinate ascent, dual QP
+    xOfLambda(qp, L, sol.lambda, sol.x);            // x* = -P^-1 (q + A'lam)
+    sol.pStar = f0(qp, sol.x);
+    sol.dStar = dualValue(qp, L, sol.lambda);
+    sol.gap   = sol.pStar - sol.dStar;
+
+    sol.slater    = findStrictlyFeasible(qp, x0);   // phase I, also answers Slater
+    sol.barrierOk = solvePrimalBarrier(qp, sol.xBarrier, sol.pStarBarrier);
+    return sol;
+}
+\end{lstlisting}
+
+For the default data the coordinate ascent converges in a \textbf{single sweep}: the first update
+sets $\lambda_{1}$ exactly, the second finds $\lambda_{2}$'s unconstrained optimum negative and
+clamps it to zero, and a second sweep reproduces both.
+
+\textbf{A bug worth recording.} An early \texttt{maxViolation} computed
+$\max_{i}(a_{i}^{T}x-b_{i})$ but initialised the running maximum to $0$ instead of $-\infty$, so
+it could never return a negative value and \emph{strict} feasibility became indistinguishable
+from boundary feasibility. Slater's condition was reported as failing for problems that plainly
+satisfy it, and the barrier line search --- which accepts a step only when the violation is
+negative --- rejected every candidate. The symptom was misleading because the dual path was
+unaffected and still produced the correct $\xstar$; only the independent cross-check had silently
+stopped running. This is an argument for cross-validation as a design principle rather than a
+finishing touch.
+
+\subsection{Plotting engine}
+
+\texttt{PlotCanvas} is a small plotting library written directly on the natID
+\texttt{gui::Canvas} primitives, because the SDK installation was missing
+\texttt{gui/plot/Plot.h} and \texttt{natPlot} could therefore not be compiled against; writing
+the renderer directly also gave the control needed for filled contour fields and envelope
+overlays. Data coordinates map affinely to device pixels, with an optional equal-aspect mode that
+expands whichever range is short --- necessary in Figure~\ref{fig:primal}, where perpendicularity
+of $\nabla f_{0}$ to the contours would otherwise be visually false. Axis ticks use the
+$1$--$2$--$5$ decade rule, and label precision is derived from the chosen step.
+
+Scalar fields are sampled on a regular grid and drawn as filled contour bands with curves
+overlaid by \textbf{marching squares}, locating edge crossings by linear interpolation. Band
+spacing is deliberately non-uniform --- quadratic for the objective field to concentrate bands
+near the minimum, and its complement for the dual field to concentrate them near the summit;
+uniform spacing wastes almost all bands on the steep outer region. Feasible sets are computed by
+\textbf{Sutherland--Hodgman clipping} of a bounding rectangle against each half-plane, and shaded
+by $45^{\circ}$ \textbf{hatching} (scanlines in a rotated frame, clipped by Liang--Barsky).
+Hatching rather than a solid fill is not decoration: a filled polygon would hide the contours
+underneath, and their relation to the feasible set is the whole content of the figure.
+
+\subsection{Interface, export, and safeguards}
+
+Six tabs sit on a \texttt{gui::StandardTabView}; parameter panels use \texttt{gui::NumericEdit}
+controls bound to model fields, with a guard flag suppressing the change callback while controls
+are populated from the model. Every figure here was produced in batch:
+\texttt{-export=<folder>} starts a timer that brings one tab on screen per tick and exports the
+previous tab's canvases through \texttt{gui::Canvas::exportToPDF}. Stepping on a timer rather
+than looping is what makes it work --- a canvas must be laid out before it has a size to render
+into. The canvas palette is chosen from the \emph{rendering backend} rather than the system
+theme: on screen it follows dark or light mode, but any other backend always uses the light
+palette, because a page is white. Without this, a dark-mode foreground produced white-on-white
+PDFs in which the plot lines were visible but every label was invisible.
+
+Because the interface allows arbitrary edits, each solver degrades explicitly: an indefinite $P$
+stops the solve and the interface explains that the inner minimisation is unbounded below; a
+failed phase I skips the barrier method and reports Slater as unsatisfied while the dual still
+provides a valid bound; degenerate rows are skipped by the coordinate ascent; and non-finite
+perturbed values are skipped by the hull construction.
+
+% ================================================================= 7
+\section{Numerical verification}\label{sec:verify}
+
+All figures below come from the standalone console harness compiled against \texttt{core/} alone.
+
+\begin{center}
+\begin{tabular}{llr}
+\toprule
+\textbf{Check} & \textbf{Measured as} & \textbf{Residual}\\
+\midrule
+KKT stationarity \eqref{eq:stat} & $\|P\xstar+q+A^{T}\lamstar\|_{\infty}$
+  & $5.55\times 10^{-16}$\\
+Complementary slackness \eqref{eq:cs} & $\max_{i}|\lambda_{i}^{\star}(b_{i}-a_{i}^{T}\xstar)|$
+  & $0.0$\\
+Primal feasibility & $\max_{i}(a_{i}^{T}\xstar-b_{i})_{+}$ & $0.0$\\
+Dual feasibility & $\max_{i}(-\lambda_{i}^{\star})_{+}$ & $0.0$\\
+Two independent primal solves, A & dual route vs.\ log barrier & $1.6\times 10^{-11}$\\
+Shadow price, A constraint 1 & central difference vs.\ $-\lambda_{1}^{\star}$
+  & $5.6\times 10^{-12}$\\
+Shadow price, A constraint 2 & central difference vs.\ $-\lambda_{2}^{\star}$ & $0.0$\\
+Shadow price, B budget & central difference vs.\ $-\lamstar$ & $2.4\times 10^{-11}$\\
+Convex envelope, C & hull at $u=0$ vs.\ $\dstar$ & $7.6\times 10^{-4}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{0.4cm}
+
+\begin{center}
+\begin{tabular}{lrrrc}
+\toprule
+\textbf{Instance} & $\pstar$ & $\dstar$ & \textbf{gap} & \textbf{strong duality}\\
+\midrule
+A --- convex QP   & $-4.250000$ & $-4.250000$ & $0.0$      & holds\\
+B --- allocation  & $-8.377168$ & $-8.377168$ & $0.0$      & holds\\
+C --- non-convex  & $-7.289309$ & $-9.000000$ & $1.710691$ & \textbf{fails}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Weak duality $\dstar\le\pstar$ holds in all three rows, as Theorem~\ref{thm:weak} requires
+without exception. Strong duality holds exactly where Slater's hypotheses are met, and fails
+where convexity was removed.
+
+% ================================================================= 8
+\section{Conclusions}
+
+The dual function was derived in closed form for the QP \eqref{eq:gqp} and the allocation problem
+\eqref{eq:waterfill}, and by global minimisation for the non-convex instance \eqref{eq:gnc}; in
+all three it came out concave, as Proposition~\ref{prop:concave} requires. Weak duality held
+everywhere, consistent with a proof that never invokes convexity. Strong duality held exactly
+where Slater's hypotheses were satisfied, and the non-convex instance --- which has strictly
+feasible points but a non-convex objective --- produced a gap of $1.7107$, isolating convexity as
+the hypothesis doing the work. The identity
+$\partial\pstar/\partial u_{i}=-\lambda_{i}^{\star}$ was confirmed to $10^{-11}$ or better in all
+three tested cases, including the degenerate one where an inactive constraint correctly priced at
+zero, and the identity $\dstar=(\conv p)(0)$ was verified directly against the computed lower
+convex hull.
+
+Two methodological points stand apart from the mathematics. Solving each convex primal
+\textbf{twice by unrelated methods} turned the duality gap from a tautology into a test --- and
+that test caught a real defect that the dual path alone would have concealed. Keeping the
+numerical core free of any interface dependency made it testable in isolation, which is where
+every result in Section~\ref{sec:verify} was produced.
+
+\textbf{Possible extensions.} Equality constraints with free-sign multipliers; dualising the
+non-negativity constraints in Instance B to obtain the full $(n+1)$-dimensional dual; an
+active-set or interior-point QP solver for larger $m$; and a search on the constraint level to
+locate exactly where the active set changes in the sensitivity curve.
+
+% ================================================================= 9
+\begin{thebibliography}{9}
+
+\bibitem{boyd} S.~Boyd and L.~Vandenberghe, \emph{Convex Optimization}, Cambridge University
+Press, 2004 --- Ch.~5 (duality), Ch.~11 (interior-point methods).
+
+\bibitem{nocedal} J.~Nocedal and S.~J.~Wright, \emph{Numerical Optimization}, 2nd ed., Springer,
+2006 --- Ch.~12, 16.
+
+\bibitem{rockafellar} R.~T.~Rockafellar, \emph{Convex Analysis}, Princeton University Press,
+1970 --- conjugacy and perturbation functions.
+
+\bibitem{bertsekas} D.~P.~Bertsekas, \emph{Nonlinear Programming}, 3rd ed., Athena Scientific,
+2016 --- duality gaps in non-convex problems.
+
+\bibitem{natid} natID framework documentation and SDK examples, Faculty of Electrical
+Engineering, University of Sarajevo.
+
+\end{thebibliography}
+
+\end{document}
