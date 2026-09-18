@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Build folderi
+build/
+buildcmake/
+CMakeCache.txt
+CMakeFiles/
+*.xcodeproj/
+cmake_install.cmake
+
+# Backup fajlovi
+*.bak
+*.bak2
